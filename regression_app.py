@@ -305,19 +305,7 @@ class VisualFeedbackSystem:
     @staticmethod
     def create_coefficient_network_viz(coefficients: np.ndarray, feature_names: List[str],
                                      intercept: float) -> go.Figure:
-        """Visualize coefficients as network connections or a simple bar chart."""
-        if st.session_state.skill_level == "🌱 Complete Beginner":
-            fig = px.bar(
-                x=feature_names,
-                y=coefficients,
-                color=['Positive' if c > 0 else 'Negative' for c in coefficients],
-                color_discrete_map={'Positive': '#FF6B35', 'Negative': '#004E89'},
-                title="How much does each feature matter?",
-                labels={'x': 'Feature', 'y': 'Coefficient Value'}
-            )
-            fig.update_layout(showlegend=False)
-            return fig
-
+        """Visualize coefficients as network connections."""
         fig = go.Figure()
 
         n_features = len(coefficients)
@@ -798,15 +786,6 @@ def create_interactive_playground():
     if 'previous_results' not in st.session_state:
         st.session_state.previous_results = None
 
-    if 'skill_level' not in st.session_state:
-        st.session_state.skill_level = "🌱 Complete Beginner"
-
-    if st.session_state.get("quick_start"):
-        st.session_state.data_source_radio = "📚 Educational Datasets"
-        st.session_state.dataset_type_select = "Linear Relationship (Easy)"
-        st.session_state.model_tab_radio = "📊 Ordinary Least Squares"
-        st.session_state.quick_start = False # Reset after applying
-
     # Header with visual emphasis
     st.markdown("""
     <div style='text-align: center; padding: 2rem; background: linear-gradient(90deg, #004E89, #FF6B35); color: white; border-radius: 10px; margin-bottom: 2rem;'>
@@ -816,19 +795,6 @@ def create_interactive_playground():
     </div>
     """, unsafe_allow_html=True)
 
-    # --- User Onboarding and Skill Level ---
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.selectbox(
-            "I am a...",
-            ["🌱 Complete Beginner", "📚 Student Learning ML", "🔬 Practicing Data Scientist"],
-            key="skill_level"
-        )
-    with col2:
-        if st.button("🚀 Quick Start"):
-            st.session_state.quick_start = True
-            st.experimental_rerun()
-
     # Progressive disclosure: Start with data selection
     with st.container():
         st.markdown("### 📊 Step 1: Choose Your Data")
@@ -837,7 +803,6 @@ def create_interactive_playground():
             "Select data source:",
             ["📚 Educational Datasets", "📁 Upload Your Own"],
             horizontal=True,
-            key="data_source_radio",
             help="Start with educational datasets to learn patterns, then try your own data!"
         )
 
@@ -851,7 +816,6 @@ def create_interactive_playground():
                     "Non-linear Challenge (Hard)",
                     "Data with Outliers (Advanced)"
                 ],
-                key="dataset_type_select",
                 help="Each dataset teaches different concepts!"
             )
 
@@ -1113,19 +1077,9 @@ def create_interactive_playground():
     else:
         st.info("💡 **Recommendation**: Compare OLS with regularized models to see the differences!")
 
-    tab_options = ["🎯 Gradient Descent", "📊 Ordinary Least Squares", "🔧 Regularized Models"]
-    if "active_model_tab" in st.session_state:
-        try:
-            default_tab_index = tab_options.index(st.session_state.active_model_tab)
-            del st.session_state.active_model_tab # so it doesn't persist on rerun
-        except ValueError:
-            default_tab_index = 0
-    else:
-        default_tab_index = 0
+    model_tabs = st.tabs(["🎯 Gradient Descent", "📊 Ordinary Least Squares", "🔧 Regularized Models"])
 
-    selected_tab = st.radio("Choose a model:", tab_options, index=default_tab_index, horizontal=True, key="model_tab_radio")
-
-    if selected_tab == "🎯 Gradient Descent":
+    with model_tabs[0]:
         st.markdown("#### Real-time Learning Visualization")
 
         col1, col2 = st.columns([1, 1])
@@ -1147,12 +1101,12 @@ def create_interactive_playground():
             cost_function = st.selectbox(
                 "Cost Function",
                 ["MSE", "MAE", "Huber"],
-                help="🤔 What is this? \n\n**MSE (Mean Squared Error):**  Sensitive to outliers. Tries to minimize large errors. \n\n**MAE (Mean Absolute Error):** More robust to outliers. Treats all errors equally. \n\n**Huber:** A balance between MSE and MAE."
+                help="🎯 MSE: sensitive to outliers, MAE: robust, Huber: balanced"
             )
 
             if cost_function == "Huber":
                 delta = st.slider("Huber Delta", 0.1, 5.0, 1.0, 0.1,
-                                help="🎚️ Threshold between MSE and MAE behavior. Lower values make it more like MAE.")
+                                help="🎚️ Threshold between MSE and MAE behavior")
             else:
                 delta = 1.0
 
@@ -1284,7 +1238,7 @@ def create_interactive_playground():
             # Display results
             display_results(results, X, y, feature_names, target_name, "Gradient Descent")
 
-    elif selected_tab == "📊 Ordinary Least Squares":
+    with model_tabs[1]:
         st.markdown("#### Analytical Solution")
         st.info("🧮 **How it works**: Solves the normal equations directly - no iterations needed!")
 
@@ -1311,7 +1265,7 @@ def create_interactive_playground():
 
             display_results(results, X, y, feature_names, target_name, "OLS")
 
-    elif selected_tab == "🔧 Regularized Models":
+    with model_tabs[2]:
         st.markdown("#### Regularization Techniques")
 
         col1, col2 = st.columns(2)
@@ -1326,7 +1280,7 @@ def create_interactive_playground():
             alpha = st.slider(
                 "Regularization Strength (α)",
                 min_value=0.001, max_value=10.0, value=1.0, step=0.001, format="%.3f",
-                help="🤔 What is this? \n\nHigher values of alpha create simpler models by shrinking the coefficients. This can help prevent overfitting."
+                help="🎚️ Higher values = more regularization = simpler model"
             )
 
         with col2:
@@ -1456,19 +1410,18 @@ def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
         """, unsafe_allow_html=True)
 
     # Additional metrics row
-    if st.session_state.skill_level != "🌱 Complete Beginner":
-        if hasattr(results, 'aic') and results.aic != 0:
-            col1, col2, col3, col4 = st.columns(4)
+    if hasattr(results, 'aic') and results.aic != 0:
+        col1, col2, col3, col4 = st.columns(4)
 
-            with col1:
-                st.metric("Adjusted R²", f"{results.adj_r_squared:.4f}")
-            with col2:
-                st.metric("AIC", f"{results.aic:.2f}" if not np.isinf(results.aic) else "Perfect Fit")
-            with col3:
-                st.metric("BIC", f"{results.bic:.2f}" if not np.isinf(results.bic) else "Perfect Fit")
-            with col4:
-                if hasattr(results, 'final_cost'):
-                    st.metric("Final Cost", f"{results.final_cost:.6f}")
+        with col1:
+            st.metric("Adjusted R²", f"{results.adj_r_squared:.4f}")
+        with col2:
+            st.metric("AIC", f"{results.aic:.2f}" if not np.isinf(results.aic) else "Perfect Fit")
+        with col3:
+            st.metric("BIC", f"{results.bic:.2f}" if not np.isinf(results.bic) else "Perfect Fit")
+        with col4:
+            if hasattr(results, 'final_cost'):
+                st.metric("Final Cost", f"{results.final_cost:.6f}")
 
     # Coefficient visualization as network
     if len(results.coefficients) > 0:
@@ -1950,6 +1903,7 @@ def main():
                     st.info(learning_state.current_hypothesis)
 
                 # Learning tips based on progress
+                st.markdown("#### 💡 Learning Tips")
                 if learning_state.experiments_count == 0:
                     st.info("🚀 **Getting Started**: Try the Linear Relationship dataset first!")
                 elif learning_state.experiments_count < 3:
