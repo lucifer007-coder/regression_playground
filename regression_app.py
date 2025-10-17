@@ -7,12 +7,13 @@ from plotly.subplots import make_subplots
 import io
 import base64
 from typing import Dict, List, Tuple, Optional, Union, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 import warnings
 from scipy import stats
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 from sklearn.linear_model import Ridge, Lasso, ElasticNet
+from sklearn.model_selection import train_test_split
 import time
 import json
 import math
@@ -140,6 +141,77 @@ class ModelResults:
     feature_importance: Optional[np.ndarray] = None
     training_time: float = 0.0
     final_cost: float = 0.0
+
+@dataclass
+class ScenarioStep:
+    """A single step in a learning scenario."""
+    text: str
+
+@dataclass
+class LearningScenario:
+    """A full learning scenario with multiple steps."""
+    title: str
+    goal: str
+    steps: List[ScenarioStep] = field(default_factory=list)
+
+# --- Guided Learning Scenarios Content ---
+SCENARIOS = [
+    LearningScenario(
+        title="1. The Basics of Linear Regression",
+        goal="Understand how slope and intercept create a regression line.",
+        steps=[
+            ScenarioStep("Welcome! Let's start with a simple linear dataset. A straight line is a good fit here. Click 'Compute OLS Solution' to see the result."),
+            ScenarioStep("Notice the 'Coefficients' table. The value for 'X' is the slope of the line. Try changing the 'True slope' slider in the data section and see how the model's learned slope changes."),
+            ScenarioStep("The 'Intercept' is where the line crosses the y-axis. This is the model's prediction when X is zero."),
+        ]
+    ),
+    LearningScenario(
+        title="2. The Problem of Noise",
+        goal="See how random noise affects the model's fit and confidence.",
+        steps=[
+            ScenarioStep("Set the 'Noise level' slider to 0.0 and compute the OLS solution. The R² score is a perfect 1.0!"),
+            ScenarioStep("Now, increase the 'Noise level' to 0.5 and re-run. Notice how the data points are more scattered and the R² score has dropped significantly."),
+            ScenarioStep("With high noise, it's harder for the model to find the true underlying pattern, even though the pattern itself hasn't changed."),
+        ]
+    ),
+    LearningScenario(
+        title="3. Underfitting vs. Overfitting",
+        goal="Visually understand the concepts of model bias and variance.",
+        steps=[
+            ScenarioStep("First, select the 'Polynomial Relationship' dataset. This data has a clear curve."),
+            ScenarioStep("Now, go to the 'Ordinary Least Squares' tab and compute the solution. The straight line can't capture the curve. This is **underfitting** (high bias)."),
+            ScenarioStep("Next, go to the 'Gradient Descent' tab. Enable the 'Train/Test Split'. We will now try to fit the curve."),
+            ScenarioStep("This is a placeholder step for adding polynomial features, which we will implement later. For now, imagine we could add X², X³ etc. An overly complex model would fit the training data perfectly but do poorly on the test data. This is **overfitting** (high variance).")
+        ]
+    ),
+    LearningScenario(
+        title="4. Taming Complexity with Regularization",
+        goal="Understand how Ridge (L2) regularization combats overfitting.",
+        steps=[
+            ScenarioStep("Using the same polynomial data with the train/test split enabled, go to the 'Regularized Models' tab and select 'Ridge (L2)'."),
+            ScenarioStep("Set the 'Regularization Strength (α)' to a very low value (e.g., 0.001) and train. Note the gap between the train and test R² scores. This is overfitting."),
+            ScenarioStep("Now, increase the 'Regularization Strength (α)' to a higher value (e.g., 5.0) and train again. The model is simpler, and the test R² score should improve, even if the train score goes down."),
+        ]
+    ),
+    LearningScenario(
+        title="5. Feature Selection with Lasso",
+        goal="See how Lasso (L1) can remove irrelevant features from a model.",
+        steps=[
+            ScenarioStep("Select the 'Multiple Features' dataset and set the number of features to 3. One of these features is less important than the others."),
+            ScenarioStep("Go to the 'Regularized Models' tab and select 'Lasso (L1)'. Set the regularization strength to 0.1 and train."),
+            ScenarioStep("Look at the 'Model Structure' visualization. Lasso has pushed the coefficient for the least important feature to exactly zero, effectively removing it! This is automatic feature selection."),
+        ]
+    ),
+    LearningScenario(
+        title="6. The Impact of Outliers",
+        goal="Understand how outliers can skew a model and how to build a robust one.",
+        steps=[
+            ScenarioStep("Select the 'Data with Outliers' dataset. Notice the few points that are far away from the main trend."),
+            ScenarioStep("In the 'Gradient Descent' tab, select 'MSE' as the cost function and train the model. The regression line is pulled towards the outliers."),
+            ScenarioStep("Now, switch the cost function to 'MAE' (Mean Absolute Error) and train again. MAE is less sensitive to outliers, so the line should now fit the main trend of the data much better!"),
+        ]
+    )
+]
 
 class DataValidator:
     """Validate and clean data for regression analysis."""
@@ -795,6 +867,40 @@ def create_interactive_playground():
     </div>
     """, unsafe_allow_html=True)
 
+    # --- Mode Selection ---
+    app_mode = st.radio(
+        "Choose your learning mode:",
+        ["Free Play Mode", "Guided Scenarios Mode"],
+        horizontal=True,
+        key="app_mode"
+    )
+
+    if app_mode == "Guided Scenarios Mode":
+        st.sidebar.title("🎓 Guided Scenarios")
+        scenario_titles = [s.title for s in SCENARIOS]
+        selected_scenario_title = st.sidebar.selectbox("Choose a scenario:", scenario_titles)
+        selected_scenario = next(s for s in SCENARIOS if s.title == selected_scenario_title)
+
+        if 'scenario_step' not in st.session_state:
+            st.session_state.scenario_step = 0
+
+        st.sidebar.markdown(f"**Goal:** *{selected_scenario.goal}*")
+
+        # Instruction Box
+        step_index = st.session_state.scenario_step
+        st.sidebar.info(selected_scenario.steps[step_index].text)
+
+        # Navigation Buttons
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("⬅️ Previous") and step_index > 0:
+                st.session_state.scenario_step -= 1
+                st.experimental_rerun()
+        with col2:
+            if st.button("Next ➡️") and step_index < len(selected_scenario.steps) - 1:
+                st.session_state.scenario_step += 1
+                st.experimental_rerun()
+
     # Progressive disclosure: Start with data selection
     with st.container():
         st.markdown("### 📊 Step 1: Choose Your Data")
@@ -912,6 +1018,30 @@ def create_interactive_playground():
         # Stop if data is not loaded
         if X is None or y is None:
             return
+
+        # --- Train/Test Split UI ---
+        st.markdown("---")
+        enable_split = st.checkbox("Enable Train/Test Split", value=False, key="enable_split", help="Split your data into training and testing sets to evaluate model generalization.")
+
+        if enable_split:
+            train_size = st.slider(
+                "Train Set Size (%)",
+                min_value=10,
+                max_value=90,
+                value=70,
+                step=5,
+                key="train_size",
+                help="The percentage of data to be used for training the model."
+            )
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, train_size=train_size / 100.0, random_state=random_seed
+            )
+
+            st.info(f"Data split into {len(X_train)} training samples and {len(X_test)} testing samples.")
+        else:
+            X_train, y_train = X, y
+            X_test, y_test = None, None
 
     # Data validation check
     is_valid, validation_message = DataValidator.validate_data(X, y)
@@ -1181,7 +1311,7 @@ def create_interactive_playground():
                 )
 
                 with st.spinner("Training model..."):
-                    results = model.fit(X, y, delta=delta, progress_callback=progress_callback)
+                    results = model.fit(X_train, y_train, delta=delta, progress_callback=progress_callback)
 
                 progress_bar.progress(1.0)
                 if results.converged:
@@ -1198,7 +1328,7 @@ def create_interactive_playground():
                 )
 
                 with st.spinner("Training model..."):
-                    results = model.fit(X, y, delta=delta)
+                    results = model.fit(X_train, y_train, delta=delta)
 
                 if results.converged:
                     st.success(f"✅ Training completed in {results.training_time:.2f} seconds!")
@@ -1222,7 +1352,7 @@ def create_interactive_playground():
                 st.session_state.learning_state.best_r_squared = results.r_squared
 
             # Display results
-            display_results(results, X, y, feature_names, target_name, "Gradient Descent")
+            display_results(results, X_train, y_train, feature_names, target_name, "Gradient Descent", X_test, y_test)
 
     with model_tabs[1]:
         st.markdown("#### Analytical Solution")
@@ -1236,7 +1366,7 @@ def create_interactive_playground():
 
             with st.spinner("Computing OLS solution..."):
                 model = OLSRegressor()
-                results = model.fit(X, y)
+                results = model.fit(X_train, y_train)
 
             if results.training_time < 0.01:
                 st.success(f"✅ Solution computed instantly!")
@@ -1249,7 +1379,7 @@ def create_interactive_playground():
             if results.r_squared > st.session_state.learning_state.best_r_squared:
                 st.session_state.learning_state.best_r_squared = results.r_squared
 
-            display_results(results, X, y, feature_names, target_name, "OLS")
+            display_results(results, X_train, y_train, feature_names, target_name, "OLS", X_test, y_test)
 
     with model_tabs[2]:
         st.markdown("#### Regularization Techniques")
@@ -1299,7 +1429,7 @@ def create_interactive_playground():
                     else:  # Elastic Net
                         model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, max_iter=max_iter, tol=1e-4)
 
-                    model.fit(X, y)
+                    model.fit(X_train, y_train)
                     training_time = time.time() - start_time
 
                     # Check convergence
@@ -1314,12 +1444,12 @@ def create_interactive_playground():
                         st.warning("⚠️ Model may not have converged. Try increasing max iterations.")
 
                 # Convert sklearn results to our format
-                predictions = model.predict(X)
-                residuals = y - predictions
+                predictions = model.predict(X_train)
+                residuals = y_train - predictions
 
                 # Calculate additional statistics
                 stats_dict = OLSRegressor()._calculate_statistics(
-                    X, y, predictions, model.coef_, model.intercept_
+                    X_train, y_train, predictions, model.coef_, model.intercept_
                 )
 
                 results = ModelResults(
@@ -1340,36 +1470,59 @@ def create_interactive_playground():
                 if results.r_squared > st.session_state.learning_state.best_r_squared:
                     st.session_state.learning_state.best_r_squared = results.r_squared
 
-                display_results(results, X, y, feature_names, target_name, reg_type)
+                display_results(results, X_train, y_train, feature_names, target_name, reg_type, X_test, y_test)
 
             except Exception as e:
                 st.error(f"Error training {reg_type} model: {e}")
                 st.info("💡 Try reducing the regularization strength or increasing max iterations.")
 
-def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
-                   feature_names: List[str], target_name: str, model_type: str):
+def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndarray,
+                   feature_names: List[str], target_name: str, model_type: str,
+                   X_test: Optional[np.ndarray] = None, y_test: Optional[np.ndarray] = None):
     """Display results with enhanced visualizations and learning insights."""
 
     st.markdown("### 🎯 Results & Analysis")
 
-    # Performance metrics with visual emphasis and better formatting
-    col1, col2, col3, col4 = st.columns(4)
+    # Calculate test metrics if test data is available
+    test_results = None
+    if X_test is not None and y_test is not None:
+        test_predictions = X_test @ results.coefficients + results.intercept
+        test_residuals = y_test - test_predictions
+        test_r_squared = 1 - (np.sum(test_residuals ** 2) / np.sum((y_test - np.mean(y_test)) ** 2))
+        test_rmse = np.sqrt(np.mean(test_residuals ** 2))
+        test_mae = np.mean(np.abs(test_residuals))
+        test_results = {'r_squared': test_r_squared, 'rmse': test_rmse, 'mae': test_mae}
 
-    with col1:
-        r2_color = "positive-value" if results.r_squared > 0.7 else "negative-value" if results.r_squared < 0.3 else "neutral-value"
-        r2_emoji = "🎉" if results.r_squared > 0.8 else "👍" if results.r_squared > 0.6 else "🤔" if results.r_squared > 0.3 else "😞"
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>{r2_emoji} R² Score</h4>
-            <p class="{r2_color}" style="font-size: 2em;">{results.r_squared:.4f}</p>
-            <small>{"Excellent!" if results.r_squared > 0.8 else "Good" if results.r_squared > 0.6 else "Fair" if results.r_squared > 0.3 else "Poor"}</small>
-        </div>
-        """, unsafe_allow_html=True)
+    # Performance metrics with visual emphasis and better formatting
+    if test_results:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### Training Set Performance")
+            st.metric("R² Score", f"{results.r_squared:.4f}", help="R-squared (R²) is a statistical measure that represents the proportion of the variance for a dependent variable that's explained by an independent variable or variables in a regression model.")
+            st.metric("RMSE", f"{results.rmse:.4f}", help="Root Mean Square Error (RMSE) is the square root of the average of the squared differences between the original and predicted values.")
+            st.metric("MAE", f"{results.mae:.4f}", help="Mean Absolute Error (MAE) is the average of the absolute differences between the original and predicted values.")
+        with col2:
+            st.markdown("#### Test Set Performance")
+            st.metric("R² Score", f"{test_results['r_squared']:.4f}", help="R-squared (R²) is a statistical measure that represents the proportion of the variance for a dependent variable that's explained by an independent variable or variables in a regression model.")
+            st.metric("RMSE", f"{test_results['rmse']:.4f}", help="Root Mean Square Error (RMSE) is the square root of the average of the squared differences between the original and predicted values.")
+            st.metric("MAE", f"{test_results['mae']:.4f}", help="Mean Absolute Error (MAE) is the average of the absolute differences between the original and predicted values.")
+    else:
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            r2_color = "positive-value" if results.r_squared > 0.7 else "negative-value" if results.r_squared < 0.3 else "neutral-value"
+            r2_emoji = "🎉" if results.r_squared > 0.8 else "👍" if results.r_squared > 0.6 else "🤔" if results.r_squared > 0.3 else "😞"
+            st.markdown(f"""
+            <div class="metric-card">
+            <h4>{r2_emoji} R² Score <span title="R-squared (R²) is a statistical measure that represents the proportion of the variance for a dependent variable that's explained by an independent variable or variables in a regression model.">❓</span></h4>
+                <p class="{r2_color}" style="font-size: 2em;">{results.r_squared:.4f}</p>
+                <small>{"Excellent!" if results.r_squared > 0.8 else "Good" if results.r_squared > 0.6 else "Fair" if results.r_squared > 0.3 else "Poor"}</small>
+            </div>
+            """, unsafe_allow_html=True)
 
     with col2:
         st.markdown(f"""
         <div class="metric-card">
-            <h4>📏 RMSE</h4>
+            <h4>📏 RMSE <span title="Root Mean Square Error (RMSE) is the square root of the average of the squared differences between the original and predicted values.">❓</span></h4>
             <p style="font-size: 2em; color: #666;">{results.rmse:.4f}</p>
             <small>Root Mean Square Error</small>
         </div>
@@ -1378,7 +1531,7 @@ def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
     with col3:
         st.markdown(f"""
         <div class="metric-card">
-            <h4>📐 MAE</h4>
+            <h4>📐 MAE <span title="Mean Absolute Error (MAE) is the average of the absolute differences between the original and predicted values.">❓</span></h4>
             <p style="font-size: 2em; color: #666;">{results.mae:.4f}</p>
             <small>Mean Absolute Error</small>
         </div>
@@ -1424,7 +1577,7 @@ def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
     st.markdown("#### 📈 Predictions vs Reality")
 
     try:
-        if X.shape[1] == 1:
+        if X_train.shape[1] == 1:
             # Enhanced 2D plot with residuals
             fig = make_subplots(
                 rows=1, cols=2,
@@ -1435,8 +1588,8 @@ def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
             # Left plot: Data and prediction line
             residual_colors = results.residuals
             fig.add_trace(go.Scatter(
-                x=X.flatten(),
-                y=y,
+                x=X_train.flatten(),
+                y=y_train,
                 mode='markers',
                 marker=dict(
                     color=residual_colors,
@@ -1445,12 +1598,21 @@ def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
                     opacity=0.7,
                     colorbar=dict(title="Residuals", x=0.45)
                 ),
-                name='Actual Data',
+                name='Training Data',
                 hovertemplate=f'{feature_names[0]}: %{{x:.3f}}<br>{target_name}: %{{y:.3f}}<br>Residual: %{{marker.color:.3f}}<extra></extra>'
             ), row=1, col=1)
 
+            if X_test is not None:
+                fig.add_trace(go.Scatter(
+                    x=X_test.flatten(),
+                    y=y_test,
+                    mode='markers',
+                    marker=dict(color='rgba(255, 107, 53, 0.5)', symbol='diamond', size=8),
+                    name='Test Data'
+                ), row=1, col=1)
+
             # Prediction line
-            x_line = np.linspace(X.min(), X.max(), 100).reshape(-1, 1)
+            x_line = np.linspace(np.min(np.concatenate((X_train, X_test or [[]]))), np.max(np.concatenate((X_train, X_test or [[]]))), 100).reshape(-1, 1)
             y_line = x_line.flatten() * results.coefficients[0] + results.intercept
 
             fig.add_trace(go.Scatter(
@@ -1486,15 +1648,15 @@ def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
 
             st.plotly_chart(fig, use_container_width=True)
 
-        elif X.shape[1] == 2:
+        elif X_train.shape[1] == 2:
             # 3D surface plot for 2 features
             fig = go.Figure()
 
-            # Data points
+            # Training data points
             fig.add_trace(go.Scatter3d(
-                x=X[:, 0],
-                y=X[:, 1],
-                z=y,
+                x=X_train[:, 0],
+                y=X_train[:, 1],
+                z=y_train,
                 mode='markers',
                 marker=dict(
                     color=results.residuals,
@@ -1503,12 +1665,23 @@ def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
                     opacity=0.8,
                     colorbar=dict(title="Residuals")
                 ),
-                name='Actual Data'
+                name='Training Data'
             ))
 
+            # Test data points
+            if X_test is not None:
+                fig.add_trace(go.Scatter3d(
+                    x=X_test[:, 0],
+                    y=X_test[:, 1],
+                    z=y_test,
+                    mode='markers',
+                    marker=dict(color='rgba(255, 107, 53, 0.5)', symbol='diamond', size=5),
+                    name='Test Data'
+                ))
+
             # Prediction surface
-            x_range = np.linspace(X[:, 0].min(), X[:, 0].max(), 20)
-            y_range = np.linspace(X[:, 1].min(), X[:, 1].max(), 20)
+            x_range = np.linspace(np.min(X_train[:, 0]), np.max(X_train[:, 0]), 20)
+            y_range = np.linspace(np.min(X_train[:, 1]), np.max(X_train[:, 1]), 20)
             xx, yy = np.meshgrid(x_range, y_range)
             zz = results.coefficients[0] * xx + results.coefficients[1] * yy + results.intercept
 
@@ -1533,12 +1706,12 @@ def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
             st.plotly_chart(fig, use_container_width=True)
 
         else:
-            # For higher dimensions, show actual vs predicted
+            # For higher dimensions, show actual vs predicted on the training set
             fig = go.Figure()
 
             # Perfect prediction line
-            min_val = min(y.min(), results.predictions.min())
-            max_val = max(y.max(), results.predictions.max())
+            min_val = min(y_train.min(), results.predictions.min())
+            max_val = max(y_train.max(), results.predictions.max())
             fig.add_trace(go.Scatter(
                 x=[min_val, max_val],
                 y=[min_val, max_val],
@@ -1549,7 +1722,7 @@ def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
 
             # Actual vs predicted points
             fig.add_trace(go.Scatter(
-                x=y,
+                x=y_train,
                 y=results.predictions,
                 mode='markers',
                 marker=dict(
@@ -1564,7 +1737,7 @@ def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
             ))
 
             fig.update_layout(
-                title=f"{model_type} - Actual vs Predicted",
+                title=f"{model_type} - Actual vs Predicted (Training Set)",
                 xaxis_title=f"Actual {target_name}",
                 yaxis_title=f"Predicted {target_name}",
                 height=500
