@@ -7,13 +7,12 @@ from plotly.subplots import make_subplots
 import io
 import base64
 from typing import Dict, List, Tuple, Optional, Union, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import warnings
 from scipy import stats
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 from sklearn.linear_model import Ridge, Lasso, ElasticNet
-from sklearn.model_selection import train_test_split
 import time
 import json
 import math
@@ -141,77 +140,6 @@ class ModelResults:
     feature_importance: Optional[np.ndarray] = None
     training_time: float = 0.0
     final_cost: float = 0.0
-
-@dataclass
-class ScenarioStep:
-    """A single step in a learning scenario."""
-    text: str
-
-@dataclass
-class LearningScenario:
-    """A full learning scenario with multiple steps."""
-    title: str
-    goal: str
-    steps: List[ScenarioStep] = field(default_factory=list)
-
-# --- Guided Learning Scenarios Content ---
-SCENARIOS = [
-    LearningScenario(
-        title="1. The Basics of Linear Regression",
-        goal="Understand how slope and intercept create a regression line.",
-        steps=[
-            ScenarioStep("Welcome! Let's start with a simple linear dataset. A straight line is a good fit here. Click 'Compute OLS Solution' to see the result."),
-            ScenarioStep("Notice the 'Coefficients' table. The value for 'X' is the slope of the line. Try changing the 'True slope' slider in the data section and see how the model's learned slope changes."),
-            ScenarioStep("The 'Intercept' is where the line crosses the y-axis. This is the model's prediction when X is zero."),
-        ]
-    ),
-    LearningScenario(
-        title="2. The Problem of Noise",
-        goal="See how random noise affects the model's fit and confidence.",
-        steps=[
-            ScenarioStep("Set the 'Noise level' slider to 0.0 and compute the OLS solution. The R² score is a perfect 1.0!"),
-            ScenarioStep("Now, increase the 'Noise level' to 0.5 and re-run. Notice how the data points are more scattered and the R² score has dropped significantly."),
-            ScenarioStep("With high noise, it's harder for the model to find the true underlying pattern, even though the pattern itself hasn't changed."),
-        ]
-    ),
-    LearningScenario(
-        title="3. Underfitting vs. Overfitting",
-        goal="Visually understand the concepts of model bias and variance.",
-        steps=[
-            ScenarioStep("First, select the 'Polynomial Relationship' dataset. This data has a clear curve."),
-            ScenarioStep("Now, go to the 'Ordinary Least Squares' tab and compute the solution. The straight line can't capture the curve. This is **underfitting** (high bias)."),
-            ScenarioStep("Next, go to the 'Gradient Descent' tab. Enable the 'Train/Test Split'. We will now try to fit the curve."),
-            ScenarioStep("This is a placeholder step for adding polynomial features, which we will implement later. For now, imagine we could add X², X³ etc. An overly complex model would fit the training data perfectly but do poorly on the test data. This is **overfitting** (high variance).")
-        ]
-    ),
-    LearningScenario(
-        title="4. Taming Complexity with Regularization",
-        goal="Understand how Ridge (L2) regularization combats overfitting.",
-        steps=[
-            ScenarioStep("Using the same polynomial data with the train/test split enabled, go to the 'Regularized Models' tab and select 'Ridge (L2)'."),
-            ScenarioStep("Set the 'Regularization Strength (α)' to a very low value (e.g., 0.001) and train. Note the gap between the train and test R² scores. This is overfitting."),
-            ScenarioStep("Now, increase the 'Regularization Strength (α)' to a higher value (e.g., 5.0) and train again. The model is simpler, and the test R² score should improve, even if the train score goes down."),
-        ]
-    ),
-    LearningScenario(
-        title="5. Feature Selection with Lasso",
-        goal="See how Lasso (L1) can remove irrelevant features from a model.",
-        steps=[
-            ScenarioStep("Select the 'Multiple Features' dataset and set the number of features to 3. One of these features is less important than the others."),
-            ScenarioStep("Go to the 'Regularized Models' tab and select 'Lasso (L1)'. Set the regularization strength to 0.1 and train."),
-            ScenarioStep("Look at the 'Model Structure' visualization. Lasso has pushed the coefficient for the least important feature to exactly zero, effectively removing it! This is automatic feature selection."),
-        ]
-    ),
-    LearningScenario(
-        title="6. The Impact of Outliers",
-        goal="Understand how outliers can skew a model and how to build a robust one.",
-        steps=[
-            ScenarioStep("Select the 'Data with Outliers' dataset. Notice the few points that are far away from the main trend."),
-            ScenarioStep("In the 'Gradient Descent' tab, select 'MSE' as the cost function and train the model. The regression line is pulled towards the outliers."),
-            ScenarioStep("Now, switch the cost function to 'MAE' (Mean Absolute Error) and train again. MAE is less sensitive to outliers, so the line should now fit the main trend of the data much better!"),
-        ]
-    )
-]
 
 class DataValidator:
     """Validate and clean data for regression analysis."""
@@ -377,7 +305,19 @@ class VisualFeedbackSystem:
     @staticmethod
     def create_coefficient_network_viz(coefficients: np.ndarray, feature_names: List[str],
                                      intercept: float) -> go.Figure:
-        """Visualize coefficients as network connections."""
+        """Visualize coefficients as network connections or a simple bar chart."""
+        if st.session_state.skill_level == "🌱 Complete Beginner":
+            fig = px.bar(
+                x=feature_names,
+                y=coefficients,
+                color=['Positive' if c > 0 else 'Negative' for c in coefficients],
+                color_discrete_map={'Positive': '#FF6B35', 'Negative': '#004E89'},
+                title="How much does each feature matter?",
+                labels={'x': 'Feature', 'y': 'Coefficient Value'}
+            )
+            fig.update_layout(showlegend=False)
+            return fig
+
         fig = go.Figure()
 
         n_features = len(coefficients)
@@ -858,6 +798,15 @@ def create_interactive_playground():
     if 'previous_results' not in st.session_state:
         st.session_state.previous_results = None
 
+    if 'skill_level' not in st.session_state:
+        st.session_state.skill_level = "🌱 Complete Beginner"
+
+    if st.session_state.get("quick_start"):
+        st.session_state.data_source_radio = "📚 Educational Datasets"
+        st.session_state.dataset_type_select = "Linear Relationship (Easy)"
+        st.session_state.model_tab_radio = "📊 Ordinary Least Squares"
+        st.session_state.quick_start = False # Reset after applying
+
     # Header with visual emphasis
     st.markdown("""
     <div style='text-align: center; padding: 2rem; background: linear-gradient(90deg, #004E89, #FF6B35); color: white; border-radius: 10px; margin-bottom: 2rem;'>
@@ -867,181 +816,152 @@ def create_interactive_playground():
     </div>
     """, unsafe_allow_html=True)
 
-    # --- Mode Selection ---
-    app_mode = st.radio(
-        "Choose your learning mode:",
-        ["Free Play Mode", "Guided Scenarios Mode"],
-        horizontal=True,
-        key="app_mode"
-    )
-
-    if app_mode == "Guided Scenarios Mode":
-        st.sidebar.title("🎓 Guided Scenarios")
-        scenario_titles = [s.title for s in SCENARIOS]
-        selected_scenario_title = st.sidebar.selectbox("Choose a scenario:", scenario_titles)
-        selected_scenario = next(s for s in SCENARIOS if s.title == selected_scenario_title)
-
-        if 'scenario_step' not in st.session_state:
-            st.session_state.scenario_step = 0
-
-        st.sidebar.markdown(f"**Goal:** *{selected_scenario.goal}*")
-
-        # Instruction Box
-        step_index = st.session_state.scenario_step
-        st.sidebar.info(selected_scenario.steps[step_index].text)
-
-        # Navigation Buttons
-        col1, col2 = st.sidebar.columns(2)
-        with col1:
-            if st.button("⬅️ Previous") and step_index > 0:
-                st.session_state.scenario_step -= 1
-                st.experimental_rerun()
-        with col2:
-            if st.button("Next ➡️") and step_index < len(selected_scenario.steps) - 1:
-                st.session_state.scenario_step += 1
-                st.experimental_rerun()
+    # --- User Onboarding and Skill Level ---
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.selectbox(
+            "I am a...",
+            ["🌱 Complete Beginner", "📚 Student Learning ML", "🔬 Practicing Data Scientist"],
+            key="skill_level"
+        )
+    with col2:
+        if st.button("🚀 Quick Start"):
+            st.session_state.quick_start = True
+            st.experimental_rerun()
 
     # Progressive disclosure: Start with data selection
     with st.container():
         st.markdown("### 📊 Step 1: Choose Your Data")
 
-        # Prioritize educational datasets for a better learning experience
-        data_source_type = st.selectbox(
-            "Choose a learning scenario:",
-            [
-                "Linear Relationship (Easy)",
-                "Polynomial Relationship (Medium)",
-                "Multiple Features (Medium)",
-                "Non-linear Challenge (Hard)",
-                "Data with Outliers (Advanced)",
-                "Upload Your Own Data"
-            ],
-            index=0, # Default to the first educational dataset
-            key="data_source_selector",
-            help="Start with educational datasets to learn patterns, then select 'Upload Your Own Data' to use your file."
+        data_source = st.radio(
+            "Select data source:",
+            ["📚 Educational Datasets", "📁 Upload Your Own"],
+            horizontal=True,
+            key="data_source_radio",
+            help="Start with educational datasets to learn patterns, then try your own data!"
         )
 
-        # Initialize variables to None
-        X, y, feature_names, target_name = None, None, None, None
+        if data_source == "📚 Educational Datasets":
+            dataset_type = st.selectbox(
+                "Choose a learning scenario:",
+                [
+                    "Linear Relationship (Easy)",
+                    "Polynomial Relationship (Medium)",
+                    "Multiple Features (Medium)",
+                    "Non-linear Challenge (Hard)",
+                    "Data with Outliers (Advanced)"
+                ],
+                key="dataset_type_select",
+                help="Each dataset teaches different concepts!"
+            )
 
-        # Section for user-uploaded data
-        if data_source_type == "Upload Your Own Data":
-            with st.expander("📁 Upload and Configure Your Data", expanded=True):
-                uploaded_file = st.file_uploader(
-                    "Upload your CSV file",
-                    type=['csv'],
-                    help="Upload a CSV file with numeric columns for regression analysis"
-                )
-
-                if uploaded_file:
-                    try:
-                        df = pd.read_csv(uploaded_file)
-                        st.write("**Data Preview:**")
-                        st.dataframe(df.head())
-
-                        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-                        if len(numeric_cols) < 2:
-                            st.error("Your CSV must have at least 2 numeric columns for regression.")
-                            return
-
-                        target_name = st.selectbox("Choose target variable (Y):", numeric_cols, key="upload_target")
-                        feature_names = st.multiselect(
-                            "Choose feature variables (X):",
-                            [col for col in numeric_cols if col != target_name],
-                            default=[col for col in numeric_cols if col != target_name][:min(3, len(numeric_cols)-1)],
-                            key="upload_features"
-                        )
-
-                        if not feature_names:
-                            st.warning("Please select at least one feature.")
-                            return
-
-                        df_clean = df[feature_names + [target_name]].dropna()
-                        if df_clean.shape[0] < df.shape[0]:
-                            st.warning(f"Removed {df.shape[0] - df_clean.shape[0]} rows with missing values.")
-
-                        X = df_clean[feature_names].values
-                        y = df_clean[target_name].values
-
-                        X, y = DataValidator.clean_data(X, y)
-                        if len(X) < 3:
-                            st.error("Not enough valid data points after cleaning.")
-                            return
-
-                    except Exception as e:
-                        st.error(f"Error processing your file: {e}")
-                        return
-                else:
-                    st.info("Please upload a file to proceed.")
-                    return # Stop execution if no file is uploaded
-
-        # Section for educational datasets
-        else:
-            dataset_type = data_source_type
+            # Dataset parameters
             col1, col2, col3 = st.columns(3)
             with col1:
-                n_samples = st.slider("Number of samples", 50, 500, 100, key="edu_samples")
+                n_samples = st.slider("Number of samples", 50, 500, 100)
             with col2:
-                noise_level = st.slider("Noise level", 0.0, 1.0, 0.1, 0.05, key="edu_noise")
+                noise_level = st.slider("Noise level", 0.0, 1.0, 0.1, 0.05)
             with col3:
-                random_seed = st.number_input("Random seed", 0, 1000, 42, key="edu_seed")
+                random_seed = st.number_input("Random seed", 0, 1000, 42)
 
+            # Generate educational dataset
             try:
                 if "Linear" in dataset_type:
-                    slope = st.slider("True slope", -5.0, 5.0, 2.0, 0.1, key="edu_slope")
+                    slope = st.slider("True slope", -5.0, 5.0, 2.0, 0.1)
                     X, y = DatasetGenerator.generate_linear(n_samples, noise_level, slope, random_seed)
-                    feature_names, target_name = ["X"], "Y"
+                    feature_names = ["X"]
+                    target_name = "Y"
                     st.info("🎯 **Learning Goal**: Understand how slope and intercept affect the line!")
+
                 elif "Polynomial" in dataset_type:
-                    degree = st.slider("Polynomial degree", 2, 4, 2, key="edu_degree")
+                    degree = st.slider("Polynomial degree", 2, 4, 2)
                     X, y = DatasetGenerator.generate_polynomial(n_samples, degree, noise_level, random_seed)
-                    feature_names, target_name = ["X"], "Y"
+                    feature_names = ["X"]
+                    target_name = "Y"
                     st.info("🎯 **Learning Goal**: See why linear models struggle with curves!")
+
                 elif "Multiple" in dataset_type:
-                    n_features = st.slider("Number of features", 2, 5, 3, key="edu_features")
+                    n_features = st.slider("Number of features", 2, 5, 3)
                     X, y = DatasetGenerator.generate_multivariate(n_samples, n_features, noise_level, random_seed)
-                    feature_names, target_name = [f"Feature_{i+1}" for i in range(n_features)], "Y"
+                    feature_names = [f"Feature_{i+1}" for i in range(n_features)]
+                    target_name = "Y"
                     st.info("🎯 **Learning Goal**: Learn how multiple features combine!")
+
                 elif "Outliers" in dataset_type:
-                    n_outliers = st.slider("Number of outliers", 0, 20, 5, key="edu_outliers")
+                    n_outliers = st.slider("Number of outliers", 0, 20, 5)
                     X, y = DatasetGenerator.generate_outliers(n_samples, n_outliers, noise_level, random_seed)
-                    feature_names, target_name = ["X"], "Y"
+                    feature_names = ["X"]
+                    target_name = "Y"
                     st.info("🎯 **Learning Goal**: See how outliers affect different models!")
-                else: # Non-linear
+
+                else:  # Non-linear
                     X, y = DatasetGenerator.generate_nonlinear(n_samples, noise_level, random_seed)
-                    feature_names, target_name = ["X"], "Y"
+                    feature_names = ["X"]
+                    target_name = "Y"
                     st.info("🎯 **Learning Goal**: Discover the limits of linear regression!")
+
             except Exception as e:
                 st.error(f"Error generating dataset: {e}")
                 return
 
-        # Stop if data is not loaded
-        if X is None or y is None:
-            return
-
-        # --- Train/Test Split UI ---
-        st.markdown("---")
-        enable_split = st.checkbox("Enable Train/Test Split", value=False, key="enable_split", help="Split your data into training and testing sets to evaluate model generalization.")
-
-        if enable_split:
-            train_size = st.slider(
-                "Train Set Size (%)",
-                min_value=10,
-                max_value=90,
-                value=70,
-                step=5,
-                key="train_size",
-                help="The percentage of data to be used for training the model."
-            )
-
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, train_size=train_size / 100.0, random_state=random_seed
-            )
-
-            st.info(f"Data split into {len(X_train)} training samples and {len(X_test)} testing samples.")
         else:
-            X_train, y_train = X, y
-            X_test, y_test = None, None
+            # File upload with enhanced guidance
+            uploaded_file = st.file_uploader(
+                "Upload your CSV file",
+                type=['csv'],
+                help="Upload a CSV file with numeric columns for regression analysis"
+            )
+
+            if uploaded_file is not None:
+                try:
+                    df = pd.read_csv(uploaded_file)
+
+                    # Show data preview
+                    st.write("**Data Preview:**")
+                    st.dataframe(df.head())
+
+                    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+
+                    if len(numeric_cols) < 2:
+                        st.error("Need at least 2 numeric columns for regression!")
+                        return
+
+                    target_name = st.selectbox("Choose target variable (Y):", numeric_cols)
+                    feature_names = st.multiselect(
+                        "Choose feature variables (X):",
+                        [col for col in numeric_cols if col != target_name],
+                        default=[col for col in numeric_cols if col != target_name][:min(3, len(numeric_cols)-1)]
+                    )
+
+                    if not feature_names:
+                        st.warning("Please select at least one feature!")
+                        return
+
+                    # Handle missing values
+                    if df[feature_names + [target_name]].isnull().any().any():
+                        st.warning("Missing values detected. They will be removed.")
+                        df_clean = df[feature_names + [target_name]].dropna()
+                        if len(df_clean) < 3:
+                            st.error("Not enough data after removing missing values!")
+                            return
+                        X = df_clean[feature_names].values
+                        y = df_clean[target_name].values
+                    else:
+                        X = df[feature_names].values
+                        y = df[target_name].values
+
+                    # Additional data validation
+                    X, y = DataValidator.clean_data(X, y)
+
+                    if len(X) < 3:
+                        st.error("Not enough valid data points for regression!")
+                        return
+
+                except Exception as e:
+                    st.error(f"Error loading data: {e}")
+                    return
+            else:
+                return
 
     # Data validation check
     is_valid, validation_message = DataValidator.validate_data(X, y)
@@ -1193,9 +1113,19 @@ def create_interactive_playground():
     else:
         st.info("💡 **Recommendation**: Compare OLS with regularized models to see the differences!")
 
-    model_tabs = st.tabs(["🎯 Gradient Descent", "📊 Ordinary Least Squares", "🔧 Regularized Models"])
+    tab_options = ["🎯 Gradient Descent", "📊 Ordinary Least Squares", "🔧 Regularized Models"]
+    if "active_model_tab" in st.session_state:
+        try:
+            default_tab_index = tab_options.index(st.session_state.active_model_tab)
+            del st.session_state.active_model_tab # so it doesn't persist on rerun
+        except ValueError:
+            default_tab_index = 0
+    else:
+        default_tab_index = 0
 
-    with model_tabs[0]:
+    selected_tab = st.radio("Choose a model:", tab_options, index=default_tab_index, horizontal=True, key="model_tab_radio")
+
+    if selected_tab == "🎯 Gradient Descent":
         st.markdown("#### Real-time Learning Visualization")
 
         col1, col2 = st.columns([1, 1])
@@ -1217,12 +1147,12 @@ def create_interactive_playground():
             cost_function = st.selectbox(
                 "Cost Function",
                 ["MSE", "MAE", "Huber"],
-                help="🎯 MSE: sensitive to outliers, MAE: robust, Huber: balanced"
+                help="🤔 What is this? \n\n**MSE (Mean Squared Error):**  Sensitive to outliers. Tries to minimize large errors. \n\n**MAE (Mean Absolute Error):** More robust to outliers. Treats all errors equally. \n\n**Huber:** A balance between MSE and MAE."
             )
 
             if cost_function == "Huber":
                 delta = st.slider("Huber Delta", 0.1, 5.0, 1.0, 0.1,
-                                help="🎚️ Threshold between MSE and MAE behavior")
+                                help="🎚️ Threshold between MSE and MAE behavior. Lower values make it more like MAE.")
             else:
                 delta = 1.0
 
@@ -1311,7 +1241,7 @@ def create_interactive_playground():
                 )
 
                 with st.spinner("Training model..."):
-                    results = model.fit(X_train, y_train, delta=delta, progress_callback=progress_callback)
+                    results = model.fit(X, y, delta=delta, progress_callback=progress_callback)
 
                 progress_bar.progress(1.0)
                 if results.converged:
@@ -1328,7 +1258,7 @@ def create_interactive_playground():
                 )
 
                 with st.spinner("Training model..."):
-                    results = model.fit(X_train, y_train, delta=delta)
+                    results = model.fit(X, y, delta=delta)
 
                 if results.converged:
                     st.success(f"✅ Training completed in {results.training_time:.2f} seconds!")
@@ -1352,9 +1282,9 @@ def create_interactive_playground():
                 st.session_state.learning_state.best_r_squared = results.r_squared
 
             # Display results
-            display_results(results, X_train, y_train, feature_names, target_name, "Gradient Descent", X_test, y_test)
+            display_results(results, X, y, feature_names, target_name, "Gradient Descent")
 
-    with model_tabs[1]:
+    elif selected_tab == "📊 Ordinary Least Squares":
         st.markdown("#### Analytical Solution")
         st.info("🧮 **How it works**: Solves the normal equations directly - no iterations needed!")
 
@@ -1366,7 +1296,7 @@ def create_interactive_playground():
 
             with st.spinner("Computing OLS solution..."):
                 model = OLSRegressor()
-                results = model.fit(X_train, y_train)
+                results = model.fit(X, y)
 
             if results.training_time < 0.01:
                 st.success(f"✅ Solution computed instantly!")
@@ -1379,9 +1309,9 @@ def create_interactive_playground():
             if results.r_squared > st.session_state.learning_state.best_r_squared:
                 st.session_state.learning_state.best_r_squared = results.r_squared
 
-            display_results(results, X_train, y_train, feature_names, target_name, "OLS", X_test, y_test)
+            display_results(results, X, y, feature_names, target_name, "OLS")
 
-    with model_tabs[2]:
+    elif selected_tab == "🔧 Regularized Models":
         st.markdown("#### Regularization Techniques")
 
         col1, col2 = st.columns(2)
@@ -1396,7 +1326,7 @@ def create_interactive_playground():
             alpha = st.slider(
                 "Regularization Strength (α)",
                 min_value=0.001, max_value=10.0, value=1.0, step=0.001, format="%.3f",
-                help="🎚️ Higher values = more regularization = simpler model"
+                help="🤔 What is this? \n\nHigher values of alpha create simpler models by shrinking the coefficients. This can help prevent overfitting."
             )
 
         with col2:
@@ -1429,7 +1359,7 @@ def create_interactive_playground():
                     else:  # Elastic Net
                         model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, max_iter=max_iter, tol=1e-4)
 
-                    model.fit(X_train, y_train)
+                    model.fit(X, y)
                     training_time = time.time() - start_time
 
                     # Check convergence
@@ -1444,12 +1374,12 @@ def create_interactive_playground():
                         st.warning("⚠️ Model may not have converged. Try increasing max iterations.")
 
                 # Convert sklearn results to our format
-                predictions = model.predict(X_train)
-                residuals = y_train - predictions
+                predictions = model.predict(X)
+                residuals = y - predictions
 
                 # Calculate additional statistics
-                stats_dict = OLSRegressor()._calculate_statistics(
-                    X_train, y_train, predictions, model.coef_, model.intercept_
+                stats_dict = BaseRegressor()._calculate_statistics(
+                    None, X, y, predictions, model.coef_, model.intercept_
                 )
 
                 results = ModelResults(
@@ -1470,59 +1400,36 @@ def create_interactive_playground():
                 if results.r_squared > st.session_state.learning_state.best_r_squared:
                     st.session_state.learning_state.best_r_squared = results.r_squared
 
-                display_results(results, X_train, y_train, feature_names, target_name, reg_type, X_test, y_test)
+                display_results(results, X, y, feature_names, target_name, reg_type)
 
             except Exception as e:
                 st.error(f"Error training {reg_type} model: {e}")
                 st.info("💡 Try reducing the regularization strength or increasing max iterations.")
 
-def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndarray,
-                   feature_names: List[str], target_name: str, model_type: str,
-                   X_test: Optional[np.ndarray] = None, y_test: Optional[np.ndarray] = None):
+def display_results(results: ModelResults, X: np.ndarray, y: np.ndarray,
+                   feature_names: List[str], target_name: str, model_type: str):
     """Display results with enhanced visualizations and learning insights."""
 
     st.markdown("### 🎯 Results & Analysis")
 
-    # Calculate test metrics if test data is available
-    test_results = None
-    if X_test is not None and y_test is not None:
-        test_predictions = X_test @ results.coefficients + results.intercept
-        test_residuals = y_test - test_predictions
-        test_r_squared = 1 - (np.sum(test_residuals ** 2) / np.sum((y_test - np.mean(y_test)) ** 2))
-        test_rmse = np.sqrt(np.mean(test_residuals ** 2))
-        test_mae = np.mean(np.abs(test_residuals))
-        test_results = {'r_squared': test_r_squared, 'rmse': test_rmse, 'mae': test_mae}
-
     # Performance metrics with visual emphasis and better formatting
-    if test_results:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("#### Training Set Performance")
-            st.metric("R² Score", f"{results.r_squared:.4f}", help="R-squared (R²) is a statistical measure that represents the proportion of the variance for a dependent variable that's explained by an independent variable or variables in a regression model.")
-            st.metric("RMSE", f"{results.rmse:.4f}", help="Root Mean Square Error (RMSE) is the square root of the average of the squared differences between the original and predicted values.")
-            st.metric("MAE", f"{results.mae:.4f}", help="Mean Absolute Error (MAE) is the average of the absolute differences between the original and predicted values.")
-        with col2:
-            st.markdown("#### Test Set Performance")
-            st.metric("R² Score", f"{test_results['r_squared']:.4f}", help="R-squared (R²) is a statistical measure that represents the proportion of the variance for a dependent variable that's explained by an independent variable or variables in a regression model.")
-            st.metric("RMSE", f"{test_results['rmse']:.4f}", help="Root Mean Square Error (RMSE) is the square root of the average of the squared differences between the original and predicted values.")
-            st.metric("MAE", f"{test_results['mae']:.4f}", help="Mean Absolute Error (MAE) is the average of the absolute differences between the original and predicted values.")
-    else:
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            r2_color = "positive-value" if results.r_squared > 0.7 else "negative-value" if results.r_squared < 0.3 else "neutral-value"
-            r2_emoji = "🎉" if results.r_squared > 0.8 else "👍" if results.r_squared > 0.6 else "🤔" if results.r_squared > 0.3 else "😞"
-            st.markdown(f"""
-            <div class="metric-card">
-            <h4>{r2_emoji} R² Score <span title="R-squared (R²) is a statistical measure that represents the proportion of the variance for a dependent variable that's explained by an independent variable or variables in a regression model.">❓</span></h4>
-                <p class="{r2_color}" style="font-size: 2em;">{results.r_squared:.4f}</p>
-                <small>{"Excellent!" if results.r_squared > 0.8 else "Good" if results.r_squared > 0.6 else "Fair" if results.r_squared > 0.3 else "Poor"}</small>
-            </div>
-            """, unsafe_allow_html=True)
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        r2_color = "positive-value" if results.r_squared > 0.7 else "negative-value" if results.r_squared < 0.3 else "neutral-value"
+        r2_emoji = "🎉" if results.r_squared > 0.8 else "👍" if results.r_squared > 0.6 else "🤔" if results.r_squared > 0.3 else "😞"
+        st.markdown(f"""
+        <div class="metric-card">
+            <h4>{r2_emoji} R² Score</h4>
+            <p class="{r2_color}" style="font-size: 2em;">{results.r_squared:.4f}</p>
+            <small>{"Excellent!" if results.r_squared > 0.8 else "Good" if results.r_squared > 0.6 else "Fair" if results.r_squared > 0.3 else "Poor"}</small>
+        </div>
+        """, unsafe_allow_html=True)
 
     with col2:
         st.markdown(f"""
         <div class="metric-card">
-            <h4>📏 RMSE <span title="Root Mean Square Error (RMSE) is the square root of the average of the squared differences between the original and predicted values.">❓</span></h4>
+            <h4>📏 RMSE</h4>
             <p style="font-size: 2em; color: #666;">{results.rmse:.4f}</p>
             <small>Root Mean Square Error</small>
         </div>
@@ -1531,7 +1438,7 @@ def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndar
     with col3:
         st.markdown(f"""
         <div class="metric-card">
-            <h4>📐 MAE <span title="Mean Absolute Error (MAE) is the average of the absolute differences between the original and predicted values.">❓</span></h4>
+            <h4>📐 MAE</h4>
             <p style="font-size: 2em; color: #666;">{results.mae:.4f}</p>
             <small>Mean Absolute Error</small>
         </div>
@@ -1549,18 +1456,19 @@ def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndar
         """, unsafe_allow_html=True)
 
     # Additional metrics row
-    if hasattr(results, 'aic') and results.aic != 0:
-        col1, col2, col3, col4 = st.columns(4)
+    if st.session_state.skill_level != "🌱 Complete Beginner":
+        if hasattr(results, 'aic') and results.aic != 0:
+            col1, col2, col3, col4 = st.columns(4)
 
-        with col1:
-            st.metric("Adjusted R²", f"{results.adj_r_squared:.4f}")
-        with col2:
-            st.metric("AIC", f"{results.aic:.2f}" if not np.isinf(results.aic) else "Perfect Fit")
-        with col3:
-            st.metric("BIC", f"{results.bic:.2f}" if not np.isinf(results.bic) else "Perfect Fit")
-        with col4:
-            if hasattr(results, 'final_cost'):
-                st.metric("Final Cost", f"{results.final_cost:.6f}")
+            with col1:
+                st.metric("Adjusted R²", f"{results.adj_r_squared:.4f}")
+            with col2:
+                st.metric("AIC", f"{results.aic:.2f}" if not np.isinf(results.aic) else "Perfect Fit")
+            with col3:
+                st.metric("BIC", f"{results.bic:.2f}" if not np.isinf(results.bic) else "Perfect Fit")
+            with col4:
+                if hasattr(results, 'final_cost'):
+                    st.metric("Final Cost", f"{results.final_cost:.6f}")
 
     # Coefficient visualization as network
     if len(results.coefficients) > 0:
@@ -1577,7 +1485,7 @@ def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndar
     st.markdown("#### 📈 Predictions vs Reality")
 
     try:
-        if X_train.shape[1] == 1:
+        if X.shape[1] == 1:
             # Enhanced 2D plot with residuals
             fig = make_subplots(
                 rows=1, cols=2,
@@ -1588,8 +1496,8 @@ def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndar
             # Left plot: Data and prediction line
             residual_colors = results.residuals
             fig.add_trace(go.Scatter(
-                x=X_train.flatten(),
-                y=y_train,
+                x=X.flatten(),
+                y=y,
                 mode='markers',
                 marker=dict(
                     color=residual_colors,
@@ -1598,21 +1506,12 @@ def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndar
                     opacity=0.7,
                     colorbar=dict(title="Residuals", x=0.45)
                 ),
-                name='Training Data',
+                name='Actual Data',
                 hovertemplate=f'{feature_names[0]}: %{{x:.3f}}<br>{target_name}: %{{y:.3f}}<br>Residual: %{{marker.color:.3f}}<extra></extra>'
             ), row=1, col=1)
 
-            if X_test is not None:
-                fig.add_trace(go.Scatter(
-                    x=X_test.flatten(),
-                    y=y_test,
-                    mode='markers',
-                    marker=dict(color='rgba(255, 107, 53, 0.5)', symbol='diamond', size=8),
-                    name='Test Data'
-                ), row=1, col=1)
-
             # Prediction line
-            x_line = np.linspace(np.min(np.concatenate((X_train, X_test or [[]]))), np.max(np.concatenate((X_train, X_test or [[]]))), 100).reshape(-1, 1)
+            x_line = np.linspace(X.min(), X.max(), 100).reshape(-1, 1)
             y_line = x_line.flatten() * results.coefficients[0] + results.intercept
 
             fig.add_trace(go.Scatter(
@@ -1648,15 +1547,15 @@ def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndar
 
             st.plotly_chart(fig, use_container_width=True)
 
-        elif X_train.shape[1] == 2:
+        elif X.shape[1] == 2:
             # 3D surface plot for 2 features
             fig = go.Figure()
 
-            # Training data points
+            # Data points
             fig.add_trace(go.Scatter3d(
-                x=X_train[:, 0],
-                y=X_train[:, 1],
-                z=y_train,
+                x=X[:, 0],
+                y=X[:, 1],
+                z=y,
                 mode='markers',
                 marker=dict(
                     color=results.residuals,
@@ -1665,23 +1564,12 @@ def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndar
                     opacity=0.8,
                     colorbar=dict(title="Residuals")
                 ),
-                name='Training Data'
+                name='Actual Data'
             ))
 
-            # Test data points
-            if X_test is not None:
-                fig.add_trace(go.Scatter3d(
-                    x=X_test[:, 0],
-                    y=X_test[:, 1],
-                    z=y_test,
-                    mode='markers',
-                    marker=dict(color='rgba(255, 107, 53, 0.5)', symbol='diamond', size=5),
-                    name='Test Data'
-                ))
-
             # Prediction surface
-            x_range = np.linspace(np.min(X_train[:, 0]), np.max(X_train[:, 0]), 20)
-            y_range = np.linspace(np.min(X_train[:, 1]), np.max(X_train[:, 1]), 20)
+            x_range = np.linspace(X[:, 0].min(), X[:, 0].max(), 20)
+            y_range = np.linspace(X[:, 1].min(), X[:, 1].max(), 20)
             xx, yy = np.meshgrid(x_range, y_range)
             zz = results.coefficients[0] * xx + results.coefficients[1] * yy + results.intercept
 
@@ -1706,12 +1594,12 @@ def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndar
             st.plotly_chart(fig, use_container_width=True)
 
         else:
-            # For higher dimensions, show actual vs predicted on the training set
+            # For higher dimensions, show actual vs predicted
             fig = go.Figure()
 
             # Perfect prediction line
-            min_val = min(y_train.min(), results.predictions.min())
-            max_val = max(y_train.max(), results.predictions.max())
+            min_val = min(y.min(), results.predictions.min())
+            max_val = max(y.max(), results.predictions.max())
             fig.add_trace(go.Scatter(
                 x=[min_val, max_val],
                 y=[min_val, max_val],
@@ -1722,7 +1610,7 @@ def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndar
 
             # Actual vs predicted points
             fig.add_trace(go.Scatter(
-                x=y_train,
+                x=y,
                 y=results.predictions,
                 mode='markers',
                 marker=dict(
@@ -1737,7 +1625,7 @@ def display_results(results: ModelResults, X_train: np.ndarray, y_train: np.ndar
             ))
 
             fig.update_layout(
-                title=f"{model_type} - Actual vs Predicted (Training Set)",
+                title=f"{model_type} - Actual vs Predicted",
                 xaxis_title=f"Actual {target_name}",
                 yaxis_title=f"Predicted {target_name}",
                 height=500
@@ -2062,7 +1950,6 @@ def main():
                     st.info(learning_state.current_hypothesis)
 
                 # Learning tips based on progress
-                st.markdown("#### 💡 Learning Tips")
                 if learning_state.experiments_count == 0:
                     st.info("🚀 **Getting Started**: Try the Linear Relationship dataset first!")
                 elif learning_state.experiments_count < 3:
