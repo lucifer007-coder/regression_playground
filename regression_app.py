@@ -1331,9 +1331,8 @@ def create_interactive_playground():
                 predictions = model.predict(X)
                 residuals = y - predictions
                 
-                # Calculate additional statistics
-                stats_dict = BaseRegressor()._calculate_statistics(
-                    None, X, y, predictions, model.coef_, model.intercept_
+                stats_dict = OLSRegressor()._calculate_statistics(
+                    X, y, predictions, model.coef_, model.intercept_
                 )
                 
                 results = ModelResults(
